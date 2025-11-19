@@ -1,0 +1,1652 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Casas Quintas Pro</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        brand: { 50: '#eff6ff', 100: '#dbeafe', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 900: '#312e81' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { background-color: #f8fafc; }
+        
+        /* Estilos personalizados para inputs */
+        .form-input {
+            transition: all 0.2s;
+            border: 1px solid #e2e8f0;
+        }
+        .form-input:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+            outline: none;
+        }
+
+        /* Scrollbar oculta para navegación móvil */
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Animaciones de Modal */
+        .modal-backdrop {
+            transition: opacity 0.3s ease;
+            opacity: 0; pointer-events: none;
+            /* Estilo para impresión */
+            @media print {
+                & { 
+                    opacity: 1; 
+                    pointer-events: auto; 
+                    background: none; 
+                    backdrop-filter: none;
+                    position: static;
+                    display: block;
+                    width: 100%;
+                    height: auto;
+                }
+            }
+        }
+        .modal-backdrop.active { opacity: 1; pointer-events: auto; }
+        
+        .modal-content {
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transform: scale(0.95) translateY(10px);
+            /* Estilo para impresión */
+            @media print {
+                & { 
+                    box-shadow: none; 
+                    transform: none; 
+                    max-width: 100%;
+                    margin: 0;
+                }
+                .no-print { display: none !important; }
+            }
+        }
+        .modal-backdrop.active .modal-content { transform: scale(1) translateY(0); }
+
+        /* Calendario */
+        .calendar-day { min-height: 90px; transition: background 0.2s; }
+        
+        /* Tooltip */
+        .tooltip-box {
+            visibility: hidden; opacity: 0; position: absolute; bottom: 100%; left: 50%; 
+            transform: translateX(-50%) translateY(5px); background: #1e293b; color: white; 
+            padding: 8px 12px; border-radius: 8px; font-size: 0.75rem; white-space: nowrap; 
+            z-index: 50; transition: 0.2s; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); pointer-events: none;
+            width: max-content;
+        }
+        .calendar-day:hover .tooltip-box { visibility: visible; opacity: 1; transform: translateX(-50%) translateY(-5px); }
+
+        /* Loader */
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #6366f1; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Mini Calendario en Modal */
+        .mini-cal-day {
+            width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; font-weight: 500; border-radius: 6px;
+        }
+        .mini-cal-occupied {
+            background-color: #fca5a5; /* Red-300 */
+            color: #b91c1c; /* Red-700 */
+            font-weight: 600;
+            border: 1px solid #f87171;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased">
+    
+    <div id="app" class="min-h-screen flex flex-col max-w-7xl mx-auto p-3 sm:p-6">
+        
+        <!-- HEADER -->
+        <header class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-6 relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brand-500 to-purple-500"></div>
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="bg-brand-50 p-3 rounded-xl">
+                        <i class="fa-solid fa-house-chimney text-2xl text-brand-600"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Gestor Quintas</h1>
+                        <p class="text-xs text-slate-500 font-medium uppercase tracking-wider">Panel de Administración</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="text-right hidden sm:block">
+                        <p id="user-status" class="text-xs font-bold text-green-600 flex items-center justify-end gap-1">
+                            <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Online
+                        </p>
+                        <p id="current-date" class="text-sm text-slate-500 font-medium"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NAV -->
+            <nav class="mt-8 flex overflow-x-auto pb-1 gap-2 scrollbar-hide">
+                <button id="nav-casas" onclick="router('casas')" class="nav-btn active group flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all text-brand-600 bg-brand-50">
+                    <i class="fa-solid fa-house group-hover:scale-110 transition-transform"></i> Mis Casas
+                </button>
+                <button id="nav-reservas" onclick="router('reservas')" class="nav-btn group flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-50 transition-all">
+                    <i class="fa-solid fa-calendar-check group-hover:scale-110 transition-transform"></i> Reservas
+                </button>
+                <button id="nav-calendario" onclick="router('calendario')" class="nav-btn group flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-50 transition-all">
+                    <i class="fa-regular fa-calendar group-hover:scale-110 transition-transform"></i> Calendario
+                </button>
+                <button id="nav-finanzas" onclick="router('finanzas')" class="nav-btn group flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-50 transition-all">
+                    <i class="fa-solid fa-chart-pie group-hover:scale-110 transition-transform"></i> Finanzas
+                </button>
+                <button id="nav-config" onclick="router('config')" class="nav-btn group flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-50 transition-all">
+                    <i class="fa-solid fa-gear group-hover:scale-110 transition-transform"></i> Ajustes
+                </button>
+            </nav>
+        </header>
+
+        <!-- MAIN CONTENT -->
+        <main class="flex-grow relative">
+            
+            <!-- VISTA CASAS -->
+            <div id="view-casas" class="view-section transition-all duration-300">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-slate-800">Propiedades</h2>
+                    <button onclick="modalCasa.open()" class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-brand-500/30 flex items-center gap-2 font-medium transition-all hover:-translate-y-0.5">
+                        <i class="fa-solid fa-plus"></i> Nueva Casa
+                    </button>
+                </div>
+
+                <!-- Dashboard de Resumen Rápido -->
+                <div id="dashboard-resumen" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+                    <!-- Cards dinámicas generadas por JS -->
+                </div>
+                <!-- Fin Dashboard -->
+
+                <div id="list-casas" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+                <div id="empty-casas" class="hidden flex flex-col items-center justify-center py-20 text-slate-400">
+                    <i class="fa-solid fa-house-chimney-crack text-6xl mb-4 opacity-20"></i>
+                    <p class="text-lg font-medium">No hay propiedades registradas</p>
+                </div>
+            </div>
+
+            <!-- VISTA RESERVAS -->
+            <div id="view-reservas" class="view-section hidden">
+                <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                    <h2 class="text-xl font-bold text-slate-800">Gestión de Reservas</h2>
+                    <div class="flex gap-3 w-full sm:w-auto">
+                        <button onclick="exportExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl shadow-lg shadow-emerald-500/20 flex-1 sm:flex-none flex items-center justify-center gap-2 font-medium text-sm transition-all">
+                            <i class="fa-solid fa-file-excel"></i> Exportar
+                        </button>
+                        <button onclick="logic.editReserva()" class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl shadow-lg shadow-brand-500/30 flex-1 sm:flex-none flex items-center justify-center gap-2 font-medium text-sm transition-all">
+                            <i class="fa-solid fa-calendar-plus"></i> Crear Reserva
+                        </button>
+                    </div>
+                </div>
+                <div id="list-reservas" class="space-y-4"></div>
+                <div id="empty-reservas" class="hidden flex flex-col items-center justify-center py-20 text-slate-400">
+                    <i class="fa-regular fa-calendar-xmark text-6xl mb-4 opacity-20"></i>
+                    <p class="text-lg font-medium">No hay reservas activas</p>
+                </div>
+            </div>
+
+            <!-- VISTA CALENDARIO -->
+            <div id="view-calendario" class="view-section hidden">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="flex justify-between items-center mb-6">
+                        <button onclick="calendar.changeMonth(-1)" class="w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center transition text-slate-600"><i class="fa-solid fa-chevron-left"></i></button>
+                        <h3 id="cal-title" class="text-xl font-bold capitalize text-slate-800"></h3>
+                        <button onclick="calendar.changeMonth(1)" class="w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center transition text-slate-600"><i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                    <div class="grid grid-cols-7 text-center mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                        <div>Dom</div><div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div>
+                    </div>
+                    <div id="cal-grid" class="grid grid-cols-7 gap-2 text-sm"></div>
+                    <!-- Leyenda de colores dinámicas -->
+                    <div id="cal-leyenda" class="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-500 justify-center border-t border-slate-100 pt-4">
+                        <!-- Leyenda de colores se llenará aquí dinámicamente -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- VISTA FINANZAS -->
+            <div id="view-finanzas" class="view-section hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-slate-800">Reporte Financiero</h2>
+                    <button onclick="modalMovimiento.open()" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl shadow-lg shadow-orange-500/20 font-medium text-sm flex items-center gap-2 transition-all">
+                        <i class="fa-solid fa-wallet"></i> Registrar Gasto/Ingreso
+                    </button>
+                </div>
+                
+                <div id="list-finanzas" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Contenido generado por JS -->
+                </div>
+
+                <div class="mt-8">
+                    <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2"><i class="fa-solid fa-receipt text-orange-500"></i> Detalle de Movimientos (Gastos/Ingresos Extra)</h3>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+                        <div id="list-movimientos" class="space-y-3">
+                            <!-- Lista de movimientos generada por JS -->
+                        </div>
+                        <div id="empty-movimientos" class="text-center py-8 text-slate-400 hidden">
+                             <i class="fa-solid fa-money-bill-transfer text-4xl mb-2 opacity-20"></i>
+                             <p>No hay movimientos extra registrados.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VISTA CONFIG -->
+            <div id="view-config" class="view-section hidden">
+                <div class="max-w-lg mx-auto bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+                    <h2 class="text-xl font-bold mb-6 text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-brand-500"></i> Configuración General
+                    </h2>
+                    <form id="form-config">
+                        <div class="mb-6">
+                            <label class="block text-sm font-semibold text-slate-700 mb-2">Costo Fijo de Limpieza (por estadía)</label>
+                            <div class="relative">
+                                <span class="absolute left-3 top-3 text-slate-400">$</span>
+                                <input type="number" id="conf-limpieza" class="form-input w-full rounded-xl p-2.5 pl-8 bg-slate-50 font-medium text-slate-800" required>
+                            </div>
+                        </div>
+                        <div class="mb-8">
+                            <label class="block text-sm font-semibold text-slate-700 mb-2">% Descuento por Larga Estadía (> 3 días)</label>
+                            <div class="relative">
+                                <input type="number" id="conf-descuento" class="form-input w-full p-2.5 bg-slate-50 font-medium text-slate-800" placeholder="Ej: 10" min="0" max="100">
+                                <span class="absolute right-3 top-3 text-slate-400">%</span>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-2 ml-1">Dejar en 0 para desactivar.</p>
+                        </div>
+                        <button type="submit" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl transition-all shadow-lg hover:shadow-xl">
+                            Guardar Cambios
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- MODALES (Con backdrop blur y animaciones) -->
+    
+    <!-- Modal Casa -->
+    <div id="modal-casa" class="modal-backdrop fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-40 p-4" onclick="if(event.target === this) modalCasa.close()">
+        <div class="modal-content bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 no-print">
+                <h3 class="font-bold text-lg text-slate-800">Propiedad</h3>
+                <button onclick="modalCasa.close()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <form id="form-casa" class="p-6 space-y-4" onsubmit="logic.saveCasa(event)">
+                <input type="hidden" id="casa-id">
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Nombre</label>
+                    <input type="text" id="casa-nombre" class="form-input w-full mt-1 p-2 rounded-lg" placeholder="Ej: Quinta Los Pinos" required>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Ubicación</label>
+                        <input type="text" id="casa-ubicacion" class="form-input w-full mt-1 p-2 rounded-lg" required>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Capacidad</label>
+                        <input type="number" id="casa-capacidad" class="form-input w-full mt-1 p-2 rounded-lg" required>
+                    </div>
+                </div>
+
+                <!-- CAMPO DE COLOR AGREGADO -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs font-bold text-brand-600 uppercase tracking-wider ml-1">Precio por Noche</label>
+                        <div class="relative mt-1">
+                            <span class="absolute left-3 top-2 text-slate-400">$</span>
+                            <input type="number" id="casa-precio" class="form-input w-full p-2 pl-6 rounded-lg bg-brand-50 border-brand-200 text-brand-900 font-bold" required placeholder="0.00">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 flex items-center">
+                            Color en Calendario <i class="fa-solid fa-palette ml-1 text-xs"></i>
+                        </label>
+                        <input type="color" id="casa-color" class="form-input w-full mt-1 p-0 h-10 rounded-lg cursor-pointer" value="#6366f1" required>
+                    </div>
+                </div>
+                <!-- FIN CAMPO DE COLOR -->
+
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Fotos (URL)</label>
+                    <div class="space-y-2 mt-1">
+                        <input type="text" id="casa-foto1" class="form-input w-full p-2 rounded-lg text-sm" placeholder="Foto Principal (URL)">
+                        <input type="text" id="casa-foto2" class="form-input w-full p-2 rounded-lg text-sm" placeholder="Foto Interior">
+                        <input type="text" id="casa-foto3" class="form-input w-full p-2 rounded-lg text-sm" placeholder="Foto Patio">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Descripción</label>
+                    <textarea id="casa-desc" rows="2" class="form-input w-full mt-1 p-2 rounded-lg text-sm"></textarea>
+                </div>
+                <div class="pt-4 flex gap-3 no-print">
+                    <button type="button" onclick="modalCasa.close()" class="flex-1 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition">Cancelar</button>
+                    <button type="submit" class="flex-1 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 font-medium shadow-lg shadow-brand-500/30 transition">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Reserva -->
+    <div id="modal-reserva" class="modal-backdrop fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-40 p-4" onclick="if(event.target === this) modalReserva.close()">
+        <div class="modal-content bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-y-auto max-h-[90vh]">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 no-print">
+                <h3 class="font-bold text-lg text-slate-800">Nueva Reserva</h3>
+                <button onclick="modalReserva.close()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <form id="form-reserva" class="p-6 grid grid-cols-1 md:grid-cols-2 gap-8" onsubmit="logic.saveReserva(event)">
+                <input type="hidden" id="reserva-id">
+                
+                <!-- Columna Izquierda (Calendario y Fechas) -->
+                <div class="space-y-5">
+                    <div class="pb-2 border-b border-slate-100">
+                        <h4 class="font-bold text-slate-700"><i class="fa-solid fa-calendar-days text-brand-500 mr-2"></i>Estadía</h4>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-600 mb-1">Propiedad</label>
+                        <div class="relative">
+                            <select id="reserva-casa" class="form-input w-full p-2.5 rounded-xl bg-white appearance-none" onchange="logic.calculateTotal(); miniCalendar.render()">
+                                <!-- Options llenadas por JS -->
+                            </select>
+                            <i class="fa-solid fa-chevron-down absolute right-3 top-3 text-slate-400 pointer-events-none"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- MINI CALENDARIO DE DISPONIBILIDAD -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div class="flex justify-between items-center mb-4">
+                            <button type="button" onclick="miniCalendar.changeMonth(-1)" class="w-8 h-8 rounded-full hover:bg-slate-200 flex items-center justify-center transition text-slate-600"><i class="fa-solid fa-chevron-left text-sm"></i></button>
+                            <h5 id="mini-cal-title" class="text-sm font-bold text-slate-800"></h5>
+                            <button type="button" onclick="miniCalendar.changeMonth(1)" class="w-8 h-8 rounded-full hover:bg-slate-200 flex items-center justify-center transition text-slate-600"><i class="fa-solid fa-chevron-right text-sm"></i></button>
+                        </div>
+                        <div class="grid grid-cols-7 text-center text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                            <div>Dom</div><div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div>
+                        </div>
+                        <div id="mini-cal-grid" class="grid grid-cols-7 gap-1 text-sm"></div>
+                        <p class="text-xs text-slate-500 text-center mt-3">Rojo: Días ocupados</p>
+                    </div>
+                    <!-- FIN MINI CALENDARIO -->
+
+
+                    <div class="grid grid-cols-2 gap-3 pt-3">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Ingreso</label>
+                            <input type="date" id="reserva-inicio" class="form-input w-full p-2 rounded-xl text-sm" onchange="logic.calculateTotal()" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Egreso</label>
+                            <input type="date" id="reserva-fin" class="form-input w-full p-2 rounded-xl text-sm" onchange="logic.calculateTotal()" required>
+                        </div>
+                    </div>
+                    
+                    <!-- Calculadora -->
+                    <div class="bg-slate-50 p-5 rounded-2xl border border-slate-100 relative overflow-hidden">
+                        <div class="absolute top-0 right-0 w-16 h-16 bg-brand-100 rounded-bl-full -mr-8 -mt-8 z-0"></div>
+                        <div class="relative z-10">
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-slate-500">Precio Base</span>
+                                <span id="calc-base" class="font-medium text-slate-700">$0</span>
+                            </div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-slate-500">Limpieza</span>
+                                <span id="calc-limp" class="font-medium text-slate-700">$0</span>
+                            </div>
+                            <div id="calc-desc-row" class="flex justify-between text-sm mb-3 text-emerald-600 font-bold hidden">
+                                <span>Descuento Larga Estadía</span>
+                                <span id="calc-desc">-$0</span>
+                            </div>
+                            <div class="border-t border-slate-200 pt-3 mt-2 flex justify-between items-end">
+                                <span class="text-brand-900 font-bold">Total Estimado</span>
+                                <span id="calc-total" class="text-3xl font-black text-brand-600 tracking-tight" data-val="0">$0.00</span>
+                            </div>
+                        </div>
+                        <p id="conflict-msg" class="hidden text-red-500 text-xs font-bold mt-3 text-center bg-white p-2 rounded-lg border border-red-100 shadow-sm">
+                            <i class="fa-solid fa-triangle-exclamation mr-1"></i> FECHAS OCUPADAS
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Columna Derecha (Huésped y Pago) -->
+                <div class="space-y-5">
+                    <div class="pb-2 border-b border-slate-100">
+                        <h4 class="font-bold text-slate-700"><i class="fa-solid fa-user text-brand-500 mr-2"></i>Huésped</h4>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-600 mb-1">Nombre Completo</label>
+                        <input type="text" id="reserva-cliente" class="form-input w-full p-2.5 rounded-xl" required>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-600 mb-1">DNI</label>
+                            <input type="text" id="reserva-dni" class="form-input w-full p-2.5 rounded-xl">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-600 mb-1">Teléfono / WP</label>
+                            <input type="text" id="reserva-tel" class="form-input w-full p-2.5 rounded-xl">
+                        </div>
+                    </div>
+
+                    <!-- NUEVO CAMPO DE NOTAS -->
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Notas / Comentarios</label>
+                        <textarea id="reserva-notas" rows="2" class="form-input w-full mt-1 p-2 rounded-lg text-sm"></textarea>
+                    </div>
+
+                    <div class="pt-4">
+                        <label class="block text-sm font-bold text-slate-700 mb-2">Pago Inicial (Seña)</label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-3 text-slate-400">$</span>
+                            <input type="number" id="reserva-senia" class="form-input w-full p-3 pl-8 rounded-xl border-green-200 focus:border-green-500 focus:ring-green-200" placeholder="0.00">
+                        </div>
+                        <p class="text-xs text-slate-400 mt-2 ml-1">Deja 0 para dejar como "Pendiente de Pago".</p>
+                    </div>
+
+                    <div class="pt-6 flex justify-end gap-3 no-print">
+                        <button type="button" onclick="modalReserva.close()" class="px-5 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition">Cancelar</button>
+                        <button type="submit" id="btn-save-reserva" class="px-6 py-2.5 bg-brand-600 text-white rounded-xl hover:bg-brand-700 font-bold shadow-lg shadow-brand-500/30 transition transform active:scale-95">Guardar Reserva</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Pago -->
+    <div id="modal-pago" class="modal-backdrop fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onclick="if(event.target === this) modalPago.close()">
+        <div class="modal-content bg-white rounded-2xl shadow-lg w-full max-w-sm p-6">
+            <div class="text-center mb-6 no-print">
+                <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3 text-green-600 text-xl">
+                    <i class="fa-solid fa-money-bill-wave"></i>
+                </div>
+                <h3 class="font-bold text-lg text-slate-800">Registrar Pago</h3>
+                <p class="text-sm text-slate-500">Ingresa el monto abonado por el cliente</p>
+            </div>
+            <input type="hidden" id="pago-reserva-id">
+            <input type="hidden" id="pago-index">
+            <input type="hidden" id="pago-fecha-original">
+            <div class="mb-4">
+                <div class="relative">
+                    <span class="absolute left-3 top-3 text-slate-400 font-bold">$</span>
+                    <input type="number" id="pago-monto" class="form-input w-full p-3 pl-8 rounded-xl text-lg font-bold text-slate-800" placeholder="0.00" required>
+                </div>
+            </div>
+            <div class="mb-6">
+                <input type="text" id="pago-nota" class="form-input w-full p-3 rounded-xl text-sm" placeholder="Concepto (ej: Pago final)">
+            </div>
+            <div class="flex gap-3 no-print">
+                <button onclick="modalPago.close()" class="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-medium hover:bg-slate-200 transition">Cancelar</button>
+                <button onclick="logic.submitPago()" id="btn-save-pago" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-green-500/30 transition">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Movimiento -->
+    <div id="modal-movimiento" class="modal-backdrop fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onclick="if(event.target === this) modalMovimiento.close()">
+        <div class="modal-content bg-white rounded-2xl shadow-lg w-full max-w-sm p-6">
+            <h3 class="font-bold text-lg text-slate-800 mb-5 flex items-center gap-2 no-print">
+                <i class="fa-solid fa-right-left text-orange-500"></i> Nuevo Movimiento
+            </h3>
+            <form id="form-movimiento" onsubmit="logic.saveMovimiento(event)">
+                <div class="space-y-4">
+                    <select id="mov-tipo" class="form-input w-full p-3 rounded-xl font-medium bg-white">
+                        <option value="gasto">?? Registrar Gasto</option>
+                        <option value="ingreso">?? Ingreso Extra</option>
+                    </select>
+                    <select id="mov-casa" class="form-input w-full p-3 rounded-xl bg-white text-sm"></select>
+                    <div class="relative">
+                        <span class="absolute left-3 top-3 text-slate-400">$</span>
+                        <input type="number" id="mov-monto" class="form-input w-full p-3 pl-8 rounded-xl" placeholder="Monto" required>
+                    </div>
+                    <input type="text" id="mov-desc" class="form-input w-full p-3 rounded-xl text-sm" placeholder="Descripción (ej: Jardinero)" required>
+                    <div class="flex gap-3 no-print">
+                         <button type="button" onclick="modalMovimiento.close()" class="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-medium hover:bg-slate-200 transition">Cancelar</button>
+                         <button type="submit" class="flex-1 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 shadow-lg transition">Guardar</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Comprobante de Pago (Nuevo) -->
+    <div id="modal-comprobante" class="modal-backdrop fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[55] p-4" onclick="if(event.target === this) modalComprobante.close()">
+        <div class="modal-content bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden p-6">
+            <div id="comprobante-content">
+                <!-- Contenido dinámico del comprobante -->
+                <div class="text-center pb-4 mb-4 border-b border-slate-200">
+                    <h2 class="text-2xl font-bold text-slate-800">Comprobante de Pago</h2>
+                    <p class="text-sm text-slate-500">Generado el <span id="comp-fecha-hoy"></span></p>
+                </div>
+
+                <!-- Detalle de la Reserva -->
+                <div class="p-4 bg-slate-50 rounded-xl mb-6 border border-slate-100">
+                    <h3 class="text-lg font-bold text-brand-700 mb-3" id="comp-propiedad"></h3>
+                    <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                        <div><span class="font-semibold text-slate-600">Huésped:</span> <span id="comp-cliente"></span></div>
+                        <div><span class="font-semibold text-slate-600">DNI/Tel:</span> <span id="comp-contacto"></span></div>
+                        <div><span class="font-semibold text-slate-600">Estadía:</span> <span id="comp-fechas"></span></div>
+                        <div><span class="font-semibold text-slate-600">Noches:</span> <span id="comp-noches"></span></div>
+                    </div>
+                </div>
+
+                <!-- Historial de Pagos -->
+                <div class="mb-6">
+                    <h4 class="font-bold text-slate-700 mb-2 border-b pb-1">Detalle de Pagos</h4>
+                    <div id="comp-pagos-list" class="space-y-2">
+                        <!-- Pagos detallados aquí -->
+                    </div>
+                </div>
+
+                <!-- Resumen de Totales -->
+                <div class="p-4 rounded-xl border-2 border-brand-200 bg-brand-50/50">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="font-semibold text-slate-600">Total de la Reserva:</span>
+                        <span id="comp-total-reserva" class="font-bold text-slate-800"></span>
+                    </div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="font-semibold text-slate-600">Total Pagado:</span>
+                        <span id="comp-total-pagado" class="font-bold text-green-600"></span>
+                    </div>
+                    <div class="flex justify-between pt-3 border-t border-brand-200/50 mt-2">
+                        <span class="text-lg font-bold text-brand-900">Saldo Pendiente:</span>
+                        <span id="comp-saldo-pendiente" class="text-2xl font-black text-red-600"></span>
+                    </div>
+                </div>
+
+                <div class="mt-6 text-center text-xs text-slate-500 pt-3 border-t border-slate-100">
+                    <p>Gracias por su reserva. Este comprobante no es válido como factura.</p>
+                </div>
+            </div>
+
+            <!-- Botones de Impresión -->
+            <div class="mt-6 flex justify-end gap-3 no-print">
+                <button onclick="modalComprobante.close()" class="px-5 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition">Cerrar</button>
+                <button onclick="setTimeout(function(){ window.print(); }, 100);" class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2 rounded-xl font-bold flex items-center gap-2 transition">
+                    <i class="fa-solid fa-print"></i> Imprimir / Guardar PDF
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-6 right-6 px-6 py-4 rounded-xl shadow-2xl text-white font-semibold transform translate-y-20 opacity-0 transition-all duration-300 z-[60] flex items-center gap-3"></div>
+    
+    <!-- Loading Overlay -->
+    <div id="loading" class="fixed inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center z-[70] hidden transition-opacity">
+        <div class="loader mb-4"></div>
+        <p class="text-slate-600 font-medium animate-pulse">Procesando...</p>
+    </div>
+
+    <!-- LOGIC -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, doc, onSnapshot, collection, addDoc, updateDoc, deleteDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // ===============================================
+        // 1. CONFIGURACIÓN FIREBASE Y VARIABLES GLOBALES
+        // ===============================================
+        
+        // **IMPORTANTE**: Uso "var" para que sean accesibles por las funciones de los botones HTML
+        var db = null;
+        var auth = null;
+        var appId = 'mi-gestor-quintas-v3'; 
+        var publicBasePath = `artifacts/${appId}/public/data`; 
+
+        // REEMPLAZA ESTE OBJETO COMPLETO con tus credenciales de Firebase:
+         const firebaseConfig = {
+            apiKey: "AIzaSyAyFVZebLuqbsLRj3LgLxRT6ijzWwTTjrI",
+            authDomain: "gestion-quintas.firebaseapp.com",
+            projectId: "gestion-quintas",
+            storageBucket: "gestion-quintas.firebasestorage.app",
+            messagingSenderId: "596005061684",
+            appId: "1:596005061684:web:badc449b38c7d736283661"
+          };
+        
+        // ESTADO
+        const state = { casas: [], reservas: [], movimientos: [], config: { limpieza: 0, descuento: 0 } };
+
+        
+        // OBTENER COLOR: Ahora solo devuelve el color guardado en el objeto casa.
+        function getCasaColor(casaId) {
+            const casa = state.casas.find(c => c.id === casaId);
+            // Asegura un color por defecto si no se ha guardado, aunque el input sea obligatorio.
+            return casa ? (casa.color || '#6366f1') : '#6366f1'; 
+        }
+
+        // HELPERS
+        const el = (id) => document.getElementById(id);
+        const showLoading = (show) => el('loading').classList.toggle('hidden', !show);
+        // Función de formato de moneda ajustada para ser explícita con el símbolo $
+        const formatMoney = (n) => `$${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)}`;
+
+        const formatDate = (d) => { const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; };
+        // Función para formato de fechas en tooltip (DD/MMM)
+        const formatTooltipDate = (dateString) => {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString + 'T00:00:00');
+            return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }).replace('.', '');
+        };
+        const diffDays = (s, e) => Math.ceil((new Date(e) - new Date(s)) / (1000 * 60 * 60 * 24));
+        
+        const toast = (msg, type='success') => {
+            const t = el('toast');
+            t.innerHTML = type === 'error' ? `<i class="fa-solid fa-circle-xmark"></i> ${msg}` : `<i class="fa-solid fa-circle-check"></i> ${msg}`;
+            t.className = `fixed bottom-6 right-6 px-6 py-4 rounded-xl shadow-2xl text-white font-semibold transform transition-all duration-300 z-[60] flex items-center gap-3 ${type==='error'?'bg-red-500':'bg-emerald-500'}`;
+            t.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => t.classList.add('translate-y-20', 'opacity-0'), 3000);
+        };
+
+        // ROUTER
+        window.router = (view) => {
+            document.querySelectorAll('.nav-btn').forEach(n => {
+                n.classList.remove('text-brand-600', 'bg-brand-50', 'active');
+                n.classList.add('text-slate-500');
+                if(n.id === `nav-${view}`) {
+                    n.classList.remove('text-slate-500');
+                    n.classList.add('text-brand-600', 'bg-brand-50', 'active');
+                }
+            });
+            document.querySelectorAll('.view-section').forEach(v => v.classList.add('hidden'));
+            const activeView = el(`view-${view}`);
+            activeView.classList.remove('hidden');
+            // Simple fade in effect
+            activeView.classList.add('opacity-0');
+            setTimeout(() => activeView.classList.remove('opacity-0'), 50);
+
+            if(view === 'calendario') calendar.render();
+            if(view === 'finanzas') renderer.finanzas();
+            if(view === 'casas') renderer.dashboard(); 
+        };
+
+        // MODALS
+        const toggleModal = (id, show) => {
+            const m = el(id);
+            if(show) m.classList.add('active');
+            else m.classList.remove('active');
+        };
+
+        window.modalCasa = {
+            open: (id) => { 
+                el('form-casa').reset(); 
+                el('casa-id').value=''; 
+                
+                // Cargar datos para edición
+                if (id) {
+                    const c = state.casas.find(x => x.id === id);
+                    if (c) {
+                        el('casa-id').value = c.id;
+                        el('casa-nombre').value = c.nombre;
+                        el('casa-ubicacion').value = c.ubicacion;
+                        el('casa-capacidad').value = c.capacidad;
+                        el('casa-precio').value = c.precio;
+                        el('casa-color').value = c.color || '#6366f1'; // Color por defecto si no existe
+                        el('casa-desc').value = c.descripcion || '';
+                        el('casa-foto1').value = (c.fotos && c.fotos[0]) || '';
+                        el('casa-foto2').value = (c.fotos && c.fotos[1]) || '';
+                        el('casa-foto3').value = (c.fotos && c.fotos[2]) || '';
+                    }
+                } else {
+                    el('casa-color').value = '#6366f1'; // Default color on new form
+                }
+                toggleModal('modal-casa', true); 
+            },
+            close: () => toggleModal('modal-casa', false)
+        };
+        
+
+        window.modalReserva = {
+            open: () => { 
+                if(!state.casas.length) return toast('Registra una casa primero', 'error');
+                el('form-reserva').reset(); el('reserva-id').value=''; 
+                el('calc-total').textContent='$0.00'; el('calc-total').dataset.val=0;
+                // Si la abrimos sin ID, es una nueva reserva.
+                el('btn-save-reserva').textContent = 'Guardar Reserva';
+                el('reserva-senia').parentNode.parentNode.classList.remove('hidden'); // Mostrar seña para nueva reserva
+
+                toggleModal('modal-reserva', true);
+                renderer.updateSelects();
+                miniCalendar.init(); 
+            },
+            close: () => toggleModal('modal-reserva', false)
+        };
+        window.modalPago = {
+            open: (id, index = null) => { 
+                el('pago-reserva-id').value = id; 
+                el('pago-index').value = index !== null ? index : ''; // Si es null, es nuevo
+                el('pago-monto').value = ''; 
+                el('pago-nota').value = ''; 
+                el('pago-fecha-original').value = '';
+
+                if (index !== null) {
+                    const res = state.reservas.find(r => r.id === id);
+                    const pago = res?.pagos?.[index];
+                    if (pago) {
+                        el('pago-monto').value = pago.monto;
+                        el('pago-nota').value = pago.nota;
+                        el('pago-fecha-original').value = pago.fecha;
+                        el('btn-save-pago').textContent = 'Guardar Edición';
+                    }
+                } else {
+                    el('btn-save-pago').textContent = 'Guardar Pago';
+                }
+
+                toggleModal('modal-pago', true); 
+            },
+            close: () => toggleModal('modal-pago', false)
+        };
+        window.modalMovimiento = {
+            open: () => { 
+                if(!state.casas.length) return toast('Registra una casa primero', 'error');
+                el('form-movimiento').reset();
+                renderer.updateSelects();
+                toggleModal('modal-movimiento', true); 
+            },
+            close: () => toggleModal('modal-movimiento', false)
+        };
+        window.modalComprobante = {
+            open: (id) => { 
+                logic.showComprobante(id);
+                toggleModal('modal-comprobante', true); 
+            },
+            close: () => toggleModal('modal-comprobante', false)
+        };
+
+        // RENDERER
+        const renderer = {
+            dashboard: () => {
+                const now = new Date();
+                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+                
+                let ingresosMes = 0;
+                let gastosMes = 0;
+                let saldoPendiente = 0;
+                let reservasActivas = 0;
+                
+                state.reservas.forEach(r => {
+                    const pagos = (r.pagos || []).reduce((acc, p) => acc + Number(p.monto), 0);
+                    const saldo = r.total - pagos;
+                    
+                    // 1. Ingresos del Mes (Pagos recibidos este mes)
+                    r.pagos.forEach(p => {
+                        if (p.fecha.split('T')[0] >= startOfMonth && p.fecha.split('T')[0] <= endOfMonth) {
+                            ingresosMes += Number(p.monto);
+                        }
+                    });
+
+                    // 2. Saldo Pendiente Total
+                    if (saldo > 0) {
+                        saldoPendiente += saldo;
+                    }
+
+                    // 3. Reservas Activas (próximas y en curso)
+                    if (new Date(r.fin) >= now) {
+                        reservasActivas++;
+                    }
+                });
+
+                // 4. Gastos del Mes
+                gastosMes = state.movimientos.filter(m => 
+                    m.tipo === 'gasto' && 
+                    m.fecha.split('T')[0] >= startOfMonth && 
+                    m.fecha.split('T')[0] <= endOfMonth
+                ).reduce((acc, m) => acc + Number(m.monto), 0);
+                
+                const utilidadMes = ingresosMes - gastosMes;
+                const utilidadClase = utilidadMes >= 0 ? 'text-green-600' : 'text-red-600';
+                const utilidadIcon = utilidadMes >= 0 ? 'fa-solid fa-arrow-trend-up' : 'fa-solid fa-arrow-trend-down';
+                const mesActual = new Intl.DateTimeFormat('es-ES', { month: 'long' }).format(now);
+
+                const dash = el('dashboard-resumen');
+                dash.innerHTML = `
+                    <div class="bg-white p-5 rounded-xl shadow-lg border border-slate-100 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500 uppercase">Ingresos ${mesActual}</p>
+                            <p class="text-2xl font-bold text-slate-800 mt-1">${formatMoney(ingresosMes)}</p>
+                        </div>
+                        <i class="fa-solid fa-sack-dollar text-3xl text-brand-500/70"></i>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl shadow-lg border border-slate-100 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500 uppercase">Gastos ${mesActual}</p>
+                            <p class="text-2xl font-bold text-red-600 mt-1">${formatMoney(gastosMes)}</p>
+                        </div>
+                        <i class="fa-solid fa-receipt text-3xl text-red-500/70"></i>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl shadow-lg border border-slate-100 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500 uppercase">Utilidad ${mesActual}</p>
+                            <p class="text-2xl font-bold ${utilidadClase} mt-1">${formatMoney(utilidadMes)}</p>
+                        </div>
+                        <i class="${utilidadIcon} text-3xl ${utilidadClase}"></i>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl shadow-lg border border-slate-100 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500 uppercase">Reservas Activas</p>
+                            <p class="text-2xl font-bold text-brand-700 mt-1">${reservasActivas}</p>
+                        </div>
+                        <i class="fa-solid fa-calendar-check text-3xl text-brand-500/70"></i>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl shadow-lg border border-slate-100 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500 uppercase">Saldo Pendiente</p>
+                            <p class="text-2xl font-bold text-red-600 mt-1">${formatMoney(saldoPendiente)}</p>
+                        </div>
+                        <i class="fa-solid fa-hand-holding-dollar text-3xl text-red-500/70"></i>
+                    </div>
+                `;
+            },
+            casas: () => {
+                renderer.dashboard(); 
+
+                const list = el('list-casas'); list.innerHTML = '';
+                el('empty-casas').classList.toggle('hidden', state.casas.length > 0);
+                state.casas.forEach(c => {
+                    const img = (c.fotos && c.fotos[0]) ? c.fotos[0] : `https://placehold.co/600x400/f1f5f9/64748b?text=${encodeURIComponent(c.nombre)}`;
+                    list.innerHTML += `
+                        <div class="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-xl transition-all duration-300 group hover:-translate-y-1">
+                            <div class="h-48 relative overflow-hidden">
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent z-10"></div>
+                                <img src="${img}" onerror="this.src='https://placehold.co/600x400/f1f5f9/64748b?text=No+Image'" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110">
+                                <span class="absolute bottom-3 right-3 z-20 bg-white/90 backdrop-blur text-brand-700 px-3 py-1 rounded-lg text-sm font-bold shadow-sm">
+                                    ${formatMoney(c.precio)} <span class="text-xs font-normal text-slate-500">/noche</span>
+                                </span>
+                                <div class="absolute top-3 left-3 w-4 h-4 rounded-full border-2 border-white shadow" style="background-color: ${getCasaColor(c.id)};"></div>
+                            </div>
+                            <div class="p-5">
+                                <h3 class="text-lg font-bold text-slate-800 mb-1">${c.nombre}</h3>
+                                <p class="text-sm text-slate-500 mb-3 flex items-center gap-1"><i class="fa-solid fa-location-dot text-slate-300"></i> ${c.ubicacion}</p>
+                                <div class="flex items-center gap-4 text-sm text-slate-600 border-t border-slate-50 pt-3">
+                                    <span><i class="fa-solid fa-users text-brand-400 mr-1"></i> ${c.capacidad} pax</span>
+                                </div>
+                            </div>
+                            <div class="px-5 pb-5 flex gap-2">
+                                <button onclick="modalCasa.open('${c.id}')" class="flex-1 bg-slate-50 text-slate-600 py-2 rounded-lg hover:bg-slate-100 text-sm font-medium transition">Editar</button>
+                                <button onclick="logic.delete('casas', '${c.id}')" class="px-3 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </div>
+                    `;
+                });
+                renderer.updateSelects();
+            },
+            reservas: () => {
+                const list = el('list-reservas'); list.innerHTML = '';
+                el('empty-reservas').classList.toggle('hidden', state.reservas.length > 0);
+                const sorted = [...state.reservas].sort((a,b) => new Date(a.inicio) - new Date(b.inicio));
+
+                sorted.forEach(r => {
+                    const casa = state.casas.find(c => c.id === r.casaId) || { nombre: 'Propiedad Eliminada' };
+                    const pagos = r.pagos || [];
+                    const pagado = pagos.reduce((acc, p) => acc + Number(p.monto), 0);
+                    const saldo = r.total - pagado;
+                    const noches = diffDays(r.inicio, r.fin);
+                    
+                    const isPaid = saldo <= 0;
+                    const statusClass = isPaid ? 'bg-green-100 text-green-700 border-green-200' : 'bg-amber-100 text-amber-700 border-amber-200';
+                    const statusIcon = isPaid ? '<i class="fa-solid fa-check-circle"></i>' : '<i class="fa-solid fa-clock"></i>';
+                    const statusText = isPaid ? 'PAGADO' : `SALDO: ${formatMoney(saldo)}`;
+
+                    const pagosHtml = (r.pagos || []).map((p, index) => `
+                        <div class="flex justify-between items-center text-xs text-slate-500 py-1 border-b border-dashed border-slate-200 last:border-0">
+                            <span class="truncate pr-2">
+                                <span class="font-bold text-slate-700 mr-2">${formatMoney(p.monto)}</span>
+                                ${p.nota}
+                            </span>
+                            <div class="flex gap-2 min-w-min">
+                                <button onclick="modalPago.open('${r.id}', ${index})" class="text-brand-500 hover:text-brand-700 transition" title="Editar Pago">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                                <button onclick="logic.deletePago('${r.id}', ${index})" class="text-red-500 hover:text-red-700 transition" title="Eliminar Pago">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `).join('');
+
+                    list.innerHTML += `
+                        <div class="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all group">
+                            <div class="flex flex-col md:flex-row justify-between gap-4 mb-4">
+                                <div class="flex gap-4">
+                                    <div class="hidden sm:flex flex-col items-center justify-center bg-slate-50 w-16 h-16 rounded-xl border border-slate-100">
+                                        <span class="text-xs font-bold text-slate-400 uppercase">${new Date(r.inicio).toLocaleString('es', {month:'short'})}</span>
+                                        <span class="text-xl font-bold text-slate-800">${new Date(r.inicio).getDate()}</span>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                            ${casa.nombre}
+                                            <span class="text-xs px-2 py-0.5 rounded-full border ${statusClass} flex items-center gap-1">${statusIcon} ${statusText}</span>
+                                        </h4>
+                                        <div class="text-sm text-slate-500 mt-1">
+                                            <i class="fa-solid fa-user text-slate-300 mr-1"></i> ${r.cliente} 
+                                            ${r.telefono ? `<span class="mx-1 text-slate-300">|</span> <i class="fa-brands fa-whatsapp text-green-500"></i> ${r.telefono}` : ''}
+                                        </div>
+                                        <div class="mt-1 text-xs text-slate-400">
+                                            ${formatDate(r.inicio)} <i class="fa-solid fa-arrow-right mx-1 text-xs"></i> ${formatDate(r.fin)} (${noches} noches)
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col items-end justify-between pl-4 md:border-l border-slate-50">
+                                    <div class="text-right">
+                                        <p class="text-xs text-slate-400 font-bold uppercase">Total</p>
+                                        <p class="text-xl font-black text-slate-800">${formatMoney(r.total)}</p>
+                                    </div>
+                                    <div class="flex gap-2 mt-3 w-full md:w-auto">
+                                        <!-- Botones en formato compacto para móvil -->
+                                        <button onclick="logic.editReserva('${r.id}')" class="flex-1 text-xs bg-slate-50 text-slate-600 px-3 py-2 rounded-xl hover:bg-slate-100 font-medium transition">
+                                            <span class="hidden sm:inline">Editar</span><i class="fa-solid fa-pen-to-square sm:hidden"></i>
+                                        </button>
+                                        <button onclick="modalComprobante.open('${r.id}')" class="text-xs bg-cyan-50 text-cyan-600 px-3 py-2 rounded-xl hover:bg-cyan-100 font-bold transition">
+                                            <i class="fa-solid fa-print"></i>
+                                        </button>
+                                        <button onclick="modalPago.open('${r.id}')" class="text-xs bg-emerald-50 text-emerald-600 px-3 py-2 rounded-xl hover:bg-emerald-100 font-bold transition">
+                                            <i class="fa-solid fa-plus"></i>
+                                        </button>
+                                        <button onclick="logic.delete('reservas', '${r.id}')" class="text-xs bg-red-50 text-red-500 px-3 py-2 rounded-xl hover:bg-red-100 transition">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Notas de la reserva -->
+                            ${r.notas ? `
+                                <div class="bg-slate-50 p-3 rounded-xl text-sm mt-3 border border-slate-100">
+                                    <span class="font-bold text-slate-700">Notas:</span> ${r.notas}
+                                </div>
+                            ` : ''}
+
+                            ${pagosHtml ? `
+                                <details class="text-xs mt-3 group/details">
+                                    <summary class="cursor-pointer text-brand-600 font-medium select-none flex items-center gap-1">
+                                        <i class="fa-solid fa-chevron-right text-[10px] transition-transform group-open/details:rotate-90"></i> Historial de Pagos (${r.pagos.length})
+                                    </summary>
+                                    <div class="pl-4 mt-2 bg-white rounded-lg p-3 border border-slate-100 shadow-inner">
+                                        ${pagosHtml}
+                                    </div>
+                                </details>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+            },
+            finanzas: () => {
+                const list = el('list-finanzas'); list.innerHTML = '';
+                const movList = el('list-movimientos'); movList.innerHTML = '';
+                let totalIngresos = 0;
+                let totalGastos = 0;
+                
+                // 1. Calcular totales por casa
+                const reportData = state.casas.map(c => {
+                    let ingresosReserva = 0, gastosMov = 0, ingresosMov = 0;
+                    
+                    state.reservas.filter(r => r.casaId === c.id).forEach(r => {
+                        ingresosReserva += (r.pagos || []).reduce((a,b) => a + Number(b.monto), 0);
+                    });
+                    
+                    state.movimientos.filter(m => m.casaId === c.id).forEach(m => {
+                        if(m.tipo === 'ingreso') ingresosMov += m.monto; else gastosMov += m.monto;
+                    });
+
+                    const totalCasaIngresos = ingresosReserva + ingresosMov;
+                    const totalCasaGastos = gastosMov;
+                    const utilidad = totalCasaIngresos - totalCasaGastos;
+
+                    totalIngresos += totalCasaIngresos;
+                    totalGastos += totalCasaGastos;
+
+                    return { ...c, totalCasaIngresos, totalCasaGastos, utilidad };
+                });
+
+                // 2. Renderizar tarjetas por casa y totales
+                reportData.forEach(c => {
+                    const isPositive = c.utilidad >= 0;
+                    list.innerHTML += `
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden">
+                            <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${isPositive ? 'from-green-50 to-transparent' : 'from-red-50 to-transparent'} rounded-bl-full -mr-4 -mt-4"></div>
+                            <h3 class="font-bold text-slate-800 text-lg border-b border-slate-50 pb-3 mb-4 flex justify-between relative z-10">
+                                ${c.nombre}
+                            </h3>
+                            <div class="space-y-3 relative z-10">
+                                <div class="flex justify-between items-center p-2 rounded-lg bg-green-50/50">
+                                    <span class="text-sm text-slate-600 flex items-center gap-2"><i class="fa-solid fa-arrow-trend-up text-green-500"></i> Ingresos Totales</span>
+                                    <span class="font-bold text-green-600">+${formatMoney(c.totalCasaIngresos)}</span>
+                                </div>
+                                <div class="flex justify-between items-center p-2 rounded-lg bg-red-50/50">
+                                    <span class="text-sm text-slate-600 flex items-center gap-2"><i class="fa-solid fa-arrow-trend-down text-red-500"></i> Gastos Totales</span>
+                                    <span class="font-bold text-red-500">-${formatMoney(c.totalCasaGastos)}</span>
+                                </div>
+                                <div class="pt-3 border-t border-slate-100 flex justify-between items-center">
+                                    <span class="text-slate-800 font-bold text-sm">Utilidad Neta</span>
+                                    <span class="text-xl font-black ${isPositive ? 'text-brand-600' : 'text-red-600'}">${formatMoney(c.utilidad)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                // 3. Renderizar tarjeta consolidada
+                const totalUtilidad = totalIngresos - totalGastos;
+                const totalPositive = totalUtilidad >= 0;
+                list.innerHTML = `
+                    <div class="bg-brand-600 text-white p-6 rounded-2xl shadow-xl shadow-brand-500/30 relative overflow-hidden lg:col-span-1">
+                        <div class="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-bl-full -mr-4 -mt-4"></div>
+                        <h3 class="font-bold text-xl mb-4 flex items-center gap-2 relative z-10">
+                            <i class="fa-solid fa-chart-line"></i> Reporte Global
+                        </h3>
+                        <div class="space-y-3 relative z-10">
+                            <div class="flex justify-between items-center border-b border-white/20 pb-2">
+                                <span class="text-sm font-medium">Ingresos Totales (Reservas + Extras)</span>
+                                <span class="font-bold text-lg">${formatMoney(totalIngresos)}</span>
+                            </div>
+                            <div class="flex justify-between items-center border-b border-white/20 pb-2">
+                                <span class="text-sm font-medium">Gastos Totales</span>
+                                <span class="font-bold text-lg">-${formatMoney(totalGastos)}</span>
+                            </div>
+                            <div class="pt-4 flex justify-between items-center">
+                                <span class="text-2xl font-black">UTILIDAD TOTAL</span>
+                                <span class="text-4xl font-black">${formatMoney(totalUtilidad)}</span>
+                            </div>
+                        </div>
+                    </div>
+                ` + list.innerHTML; // Agregamos el total al inicio.
+
+
+                // 4. Renderizar lista de movimientos
+                const sortedMov = [...state.movimientos].sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
+                el('empty-movimientos').classList.toggle('hidden', sortedMov.length > 0);
+
+                sortedMov.forEach(m => {
+                    const casa = state.casas.find(c => c.id === m.casaId)?.nombre || 'N/A';
+                    const isGasto = m.tipo === 'gasto';
+                    const color = isGasto ? 'text-red-600' : 'text-green-600';
+                    const icon = isGasto ? 'fa-solid fa-minus-circle' : 'fa-solid fa-plus-circle';
+                    
+                    movList.innerHTML += `
+                        <div class="flex justify-between items-center p-3 rounded-xl ${isGasto ? 'bg-red-50/50' : 'bg-green-50/50'} border border-slate-100">
+                            <div class="flex items-center gap-3">
+                                <i class="${icon} text-lg ${color}"></i>
+                                <div>
+                                    <p class="font-medium text-slate-800">${m.descripcion}</p>
+                                    <p class="text-xs text-slate-500">${formatDate(m.fecha.split('T')[0])} | ${casa}</p>
+                                </div>
+                            </div>
+                            <div class="text-right flex items-center gap-3">
+                                <span class="font-bold ${color}">${isGasto ? '-' : '+'}${formatMoney(m.monto)}</span>
+                                <button onclick="logic.delete('movimientos', '${m.id}')" class="text-xs text-slate-400 hover:text-red-500 p-1 rounded-full transition"><i class="fa-solid fa-trash-can"></i></button>
+                            </div>
+                        </div>
+                    `;
+                });
+            },
+            updateSelects: () => {
+                const html = state.casas.map(c => `<option value="${c.id}" data-price="${c.precio}">${c.nombre}</option>`).join('');
+                ['reserva-casa', 'mov-casa'].forEach(id => {
+                    const sel = el(id);
+                    if(sel) { 
+                        sel.innerHTML = html || '<option value="">Registra una casa primero</option>'; 
+                        if (id === 'reserva-casa' && !el('reserva-id').value) logic.calculateTotal(); 
+                    }
+                });
+            }
+        };
+
+        // CALENDAR (Calendario grande de la vista Calendario)
+        const calendar = {
+            date: new Date(),
+            changeMonth: (diff) => { calendar.date.setMonth(calendar.date.getMonth() + diff); calendar.render(); },
+            render: () => {
+                const y = calendar.date.getFullYear(), m = calendar.date.getMonth();
+                el('cal-title').innerText = new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(calendar.date);
+                
+                const firstDay = new Date(y, m, 1).getDay();
+                const daysInMonth = new Date(y, m + 1, 0).getDate();
+                const grid = el('cal-grid'); grid.innerHTML = '';
+                const leyenda = el('cal-leyenda'); leyenda.innerHTML = '';
+                
+                const map = {};
+                // 1. Mapear reservas y obtener colores de casa
+                state.reservas.forEach(r => {
+                    if (!r.inicio || !r.fin) return; 
+
+                    let cur = new Date(r.inicio + 'T00:00:00');
+                    const end = new Date(r.fin + 'T00:00:00');
+                    const casa = state.casas.find(c => c.id === r.casaId);
+                    const pagos = (r.pagos || []).reduce((a,b) => a + Number(b.monto), 0);
+                    const pagado = pagos >= r.total;
+                    const color = getCasaColor(r.casaId); 
+
+                    // Obtener la reserva para el rango completo
+                    const reservationDetails = {
+                        cliente: r.cliente,
+                        casa: casa ? casa.nombre : '?',
+                        paid: pagado,
+                        color: color,
+                        casaId: r.casaId,
+                        inicio: r.inicio,
+                        fin: r.fin 
+                    };
+
+                    while(cur < end) {
+                        const k = cur.toISOString().split('T')[0];
+                        if(!map[k]) map[k] = [];
+                        map[k].push(reservationDetails);
+                        cur.setDate(cur.getDate() + 1);
+                    }
+                });
+
+                // 2. Generar Leyenda de Colores
+                const casasConColor = new Map();
+                state.casas.forEach(c => {
+                    casasConColor.set(c.id, { nombre: c.nombre, color: getCasaColor(c.id) });
+                });
+                
+                let leyendaHtml = '';
+                casasConColor.forEach(c => {
+                    leyendaHtml += `<div class="flex items-center gap-2">
+                        <span class="w-3 h-3 block rounded-full" style="background-color: ${c.color};"></span> 
+                        ${c.nombre}
+                    </div>`;
+                });
+                // Agregar leyenda de estado de pago
+                leyendaHtml += `
+                    <div class="flex items-center gap-2"><span class="w-3 h-3 bg-red-100 border-l-2 border-red-500 block"></span> Seña / Pendiente</div>
+                    <div class="flex items-center gap-2"><span class="w-3 h-3 bg-green-100 border-l-2 border-green-500 block"></span> Totalmente Pagado</div>
+                `;
+                leyenda.innerHTML = leyendaHtml;
+
+
+                // 3. Renderizar días del calendario
+                const startDayIndex = (firstDay === 0) ? 6 : firstDay - 1;
+
+                for(let i=0; i<startDayIndex; i++) grid.innerHTML += `<div class="bg-slate-50 rounded-xl opacity-50"></div>`;
+
+                for(let d=1; d<=daysInMonth; d++) {
+                    const k = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                    const bookings = map[k];
+                    let content = `<span class="text-slate-400 font-bold text-xs absolute top-2 left-2">${d}</span>`;
+                    let classes = "bg-white hover:bg-slate-50 relative calendar-day border border-slate-100 rounded-xl p-1 flex flex-col justify-end transition cursor-pointer group";
+                    
+                    if(bookings) {
+                        const allPaid = !bookings.some(b => !b.paid);
+                        const mainBooking = bookings[0];
+                        
+                        // Generar el fondo dinámico basado en el estado de pago
+                        const colorBorde = mainBooking.color;
+                        const colorFondo = allPaid ? getCasaColor(mainBooking.casaId) + '1A' : getCasaColor(mainBooking.casaId) + '0D'; 
+
+                        classes = `relative calendar-day rounded-xl p-1 flex flex-col justify-end border border-slate-100`;
+                        classes += ` style="background-color: ${colorFondo}; border-left: 4px solid ${colorBorde};"`;
+
+                        // Tooltip detallado (Respuesta a la solicitud del usuario)
+                        const tooltipText = bookings.map(b => {
+                            const range = `${formatTooltipDate(b.inicio)} - ${formatTooltipDate(b.fin)}`;
+                            return `<div class="text-xs mb-1">
+                                <div class="flex items-center gap-1 font-bold">
+                                    <span class="w-2 h-2 rounded-full" style="background-color: ${b.color};"></span> 
+                                    ${b.casa}
+                                </div>
+                                <div class="text-slate-300 ml-3 text-[10px]">${range}</div>
+                                <div class="text-[10px] ml-3 italic">${b.cliente} (${b.paid ? 'Pagado' : 'Seña'})</div>
+                            </div>`;
+                        }).join('');
+                        
+                        // BARRAS DE COLOR (Más visible que los puntos)
+                        const barContent = bookings.map(b => `
+                            <div class="h-2 flex-1" style="background-color: ${b.color};"></div>
+                        `).join('');
+
+                        content += `
+                            <div class="absolute bottom-0 left-0 right-0 h-2 flex overflow-hidden rounded-b-lg">
+                                ${barContent}
+                            </div>
+                            <div class="tooltip-box shadow-xl bg-slate-800 text-white p-3 rounded-lg">${tooltipText}</div>
+                        `;
+                    }
+                    grid.innerHTML += `<div class="${classes}">${content}</div>`;
+                }
+            }
+        };
+        window.calendar = calendar; 
+
+
+        // MINI CALENDARIO (Dentro del Modal Reserva)
+        const miniCalendar = {
+            date: new Date(),
+            changeMonth: (diff) => { miniCalendar.date.setMonth(miniCalendar.date.getMonth() + diff); miniCalendar.render(); },
+            init: () => { 
+                miniCalendar.date = new Date(); // Resetear al mes actual
+                miniCalendar.render(); 
+            },
+            render: () => {
+                const y = miniCalendar.date.getFullYear(), m = miniCalendar.date.getMonth();
+                const casaId = el('reserva-casa').value;
+                const grid = el('mini-cal-grid'); 
+
+                if (!casaId) {
+                    grid.innerHTML = '<div class="col-span-7 text-center text-sm text-slate-400 py-3">Selecciona una propiedad</div>';
+                    el('mini-cal-title').innerText = 'Disponibilidad';
+                    return;
+                }
+
+                el('mini-cal-title').innerText = new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(miniCalendar.date);
+                grid.innerHTML = '';
+                
+                const firstDay = new Date(y, m, 1).getDay();
+                const daysInMonth = new Date(y, m + 1, 0).getDate();
+                const today = new Date().toISOString().split('T')[0];
+
+                // Mapear días ocupados para la propiedad seleccionada
+                const occupiedDays = new Set();
+                state.reservas
+                    .filter(r => r.casaId === casaId)
+                    .forEach(r => {
+                        let cur = new Date(r.inicio + 'T00:00:00');
+                        const end = new Date(r.fin + 'T00:00:00');
+                        while(cur < end) {
+                            occupiedDays.add(cur.toISOString().split('T')[0]);
+                            cur.setDate(cur.getDate() + 1);
+                        }
+                    });
+
+                // Días vacíos al inicio (ajuste del día de la semana)
+                const startDayIndex = (firstDay === 0) ? 6 : firstDay - 1;
+                for(let i=0; i<startDayIndex; i++) grid.innerHTML += '<div></div>';
+
+                // Renderizar días
+                for(let d=1; d<=daysInMonth; d++) {
+                    const dayString = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                    const isOccupied = occupiedDays.has(dayString);
+                    let classes = 'mini-cal-day bg-white text-slate-600';
+
+                    if(isOccupied) {
+                        classes = 'mini-cal-day mini-cal-occupied';
+                    }
+                    if(dayString === today) {
+                         classes += ' border-2 border-brand-500 font-bold';
+                    }
+
+                    grid.innerHTML += `<div class="${classes}">${d}</div>`;
+                }
+            }
+        };
+        window.miniCalendar = miniCalendar; 
+
+
+        // LOGIC
+        window.logic = {
+            calculateTotal: () => {
+                const casaId = el('reserva-casa').value;
+                const ini = el('reserva-inicio').value;
+                const fin = el('reserva-fin').value;
+                const casa = state.casas.find(c => c.id === casaId);
+                const descEl = el('calc-desc-row');
+                
+                if(!casa || !ini || !fin) { 
+                    el('calc-total').textContent = "$0.00"; el('calc-total').dataset.val=0; 
+                    el('calc-base').textContent = "$0"; el('calc-limp').textContent = "$0";
+                    descEl.classList.add('hidden');
+                    return; 
+                }
+
+                const days = diffDays(ini, fin);
+                // Si la fecha de fin es anterior o igual a la de inicio, es inválido.
+                if(days <= 0) { 
+                    el('calc-total').textContent = "Fechas inv."; 
+                    el('calc-total').dataset.val=0; 
+                    el('conflict-msg').classList.remove('hidden');
+                    el('conflict-msg').innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1"></i> FECHAS INVÁLIDAS';
+                    el('btn-save-reserva').disabled = true;
+                    el('btn-save-reserva').classList.add('opacity-50', 'cursor-not-allowed');
+                    return; 
+                }
+
+                const limpieza = Number(state.config.limpieza) || 0;
+                const base = days * casa.precio;
+                let total = base + limpieza;
+                
+                el('calc-base').textContent = formatMoney(base);
+                el('calc-limp').textContent = formatMoney(limpieza);
+                
+                const descPorc = Number(state.config.descuento) || 0;
+                if(days > 3 && descPorc > 0) {
+                    const descMonto = total * (descPorc / 100);
+                    total -= descMonto;
+                    descEl.classList.remove('hidden');
+                    el('calc-desc').textContent = `-${formatMoney(descMonto)} (${descPorc}%)`;
+                } else {
+                    descEl.classList.add('hidden');
+                }
+
+                el('calc-total').textContent = formatMoney(total);
+                el('calc-total').dataset.val = total;
+
+                // VALIDACIÓN 1: Conflicto de Fechas para la MISMA CASA
+                const conflicto = state.reservas.some(r => 
+                    r.casaId === casaId && // Solo verifica la misma propiedad
+                    r.id !== el('reserva-id').value &&
+                    (new Date(ini) < new Date(r.fin) && new Date(fin) > new Date(r.inicio))
+                );
+                
+                if(conflicto) {
+                    el('conflict-msg').classList.remove('hidden');
+                    el('conflict-msg').innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1"></i> FECHAS OCUPADAS';
+                    el('btn-save-reserva').disabled = true;
+                    el('btn-save-reserva').classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    el('conflict-msg').classList.add('hidden');
+                    el('btn-save-reserva').disabled = false;
+                    el('btn-save-reserva').classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            },
+            saveCasa: async (e) => {
+                e.preventDefault(); showLoading(true);
+                const id = el('casa-id').value;
+                const data = {
+                    nombre: el('casa-nombre').value,
+                    ubicacion: el('casa-ubicacion').value,
+                    capacidad: Number(el('casa-capacidad').value),
+                    precio: Number(el('casa-precio').value),
+                    color: el('casa-color').value, // GUARDAR EL COLOR
+                    descripcion: el('casa-desc').value,
+                    fotos: [el('casa-foto1').value, el('casa-foto2').value, el('casa-foto3').value].filter(Boolean)
+                };
+                try {
+                    const collectionRef = collection(db, `${publicBasePath}/casas`);
+                    if(id) {
+                        await updateDoc(doc(db, `${publicBasePath}/casas`, id), data);
+                    } else {
+                        await addDoc(collectionRef, data);
+                    }
+                    modalCasa.close(); toast('Propiedad guardada');
+                } catch(err) { toast('Error al guardar', 'error'); console.error('Error al guardar casa:', err); }
+                showLoading(false);
+            },
+            editReserva: (id) => {
+                if (!id) {
+                    modalReserva.open(); 
+                    return; 
+                } 
+
+                const r = state.reservas.find(x => x.id === id);
+                if (!r) return toast('Reserva no encontrada', 'error');
+
+                el('reserva-id').value = r.id;
+                el('reserva-casa').value = r.casaId;
+                el('reserva-inicio').value = r.inicio;
+                el('reserva-fin').value = r.fin;
+                el('reserva-cliente').value = r.cliente;
+                el('reserva-dni').value = r.dni || '';
+                el('reserva-tel').value = r.telefono || '';
+                el('reserva-notas').value = r.notas || '';
+                
+                el('reserva-senia').parentNode.parentNode.classList.add('hidden'); // Ocultar seña al editar
+                el('btn-save-reserva').textContent = 'Actualizar Reserva';
+
+                toggleModal('modal-reserva', true);
+                renderer.updateSelects(); // Esto carga las casas en el select
+                logic.calculateTotal(); // Recalcula el total y valida conflicto
+                miniCalendar.render(); // Refresca el mini calendario
+            },
+            saveReserva: async (e) => {
+                e.preventDefault(); 
+                const isEditing = el('reserva-id').value !== '';
+                
+                if (el('btn-save-reserva').disabled) return toast('Error: Las fechas ya están ocupadas o son inválidas.', 'error');
+
+                showLoading(true);
+                const total = Number(el('calc-total').dataset.val);
+                
+                if(total <= 0) {
+                    showLoading(false);
+                    return toast('El total de la reserva debe ser mayor a cero.', 'error');
+                }
+                
+                const data = {
+                    casaId: el('reserva-casa').value,
+                    inicio: el('reserva-inicio').value,
+                    fin: el('reserva-fin').value,
+                    cliente: el('reserva-cliente').value,
+                    dni: el('reserva-dni').value,
+                    telefono: el('reserva-tel').value,
+                    notas: el('reserva-notas').value,
+                    total: total,
+                };
+
+                try {
+                    if (isEditing) {
+                        // Edición: solo actualizamos los campos principales (pagos se mantienen)
+                        await updateDoc(doc(db, `${publicBasePath}/reservas`, el('reserva-id').value), data);
+                        toast('Reserva actualizada exitosamente');
+                    } else {
+                        // Nueva Reserva: Añadir la seña como primer pago
+                        const senia = Number(el('reserva-senia').value);
+                        const pagos = [];
+                        if(senia > 0) pagos.push({ monto: senia, fecha: new Date().toISOString(), nota: 'Seña Inicial' });
+                        data.pagos = pagos;
+                        await addDoc(collection(db, `${publicBasePath}/reservas`), data);
+                        toast('Reserva creada exitosamente');
+                    }
+                    modalReserva.close();
+                } catch(err) { toast('Error al guardar reserva', 'error'); console.error('Error al guardar reserva:', err); }
+                showLoading(false);
+            },
+            submitPago: async () => {
+                showLoading(true);
+                const rid = el('pago-reserva-id').value;
+                const index = el('pago-index').value;
+                const monto = Number(el('pago-monto').value);
+                const nota = el('pago-nota').value || 'Pago Extra';
+                const fechaOriginal = el('pago-fecha-original').value;
+                
+                if (monto <= 0) {
+                    showLoading(false);
+                    return toast('El monto debe ser mayor a cero.', 'error');
+                }
+
+                const res = state.reservas.find(r => r.id === rid);
+                let nuevosPagos = [...(res.pagos || [])];
+                
+                if (index !== '') {
+                    // EDITAR Pago
+                    nuevosPagos[Number(index)] = { monto, fecha: fechaOriginal, nota };
+                    toast('Pago editado');
+                } else {
+                    // NUEVO Pago
+                    nuevosPagos.push({ monto, fecha: new Date().toISOString(), nota });
+                    toast('Pago registrado');
+                }
+                
+                try {
+                    await updateDoc(doc(db, `${publicBasePath}/reservas`, rid), { pagos: nuevosPagos });
+                    modalPago.close(); 
+                } catch(err) { toast('Error al guardar pago', 'error'); console.error('Error al guardar pago:', err); }
+                showLoading(false);
+            },
+            deletePago: async (reservaId, pagoIndex) => {
+                if(!confirm('¿Estás seguro de eliminar este pago?')) return;
+                showLoading(true);
+
+                const res = state.reservas.find(r => r.id === reservaId);
+                let nuevosPagos = [...(res.pagos || [])];
+                
+                nuevosPagos.splice(pagoIndex, 1);
+
+                try {
+                    await updateDoc(doc(db, `${publicBasePath}/reservas`, reservaId), { pagos: nuevosPagos });
+                    toast('Pago eliminado');
+                } catch(err) { toast('Error al eliminar pago', 'error'); console.error('Error al eliminar pago:', err); }
+                showLoading(false);
+            },
+            saveMovimiento: async (e) => {
+                e.preventDefault(); showLoading(true);
+                const data = {
+                    tipo: el('mov-tipo').value,
+                    casaId: el('mov-casa').value,
+                    monto: Number(el('mov-monto').value),
+                    descripcion: el('mov-desc').value,
+                    fecha: new Date().toISOString()
+                };
+                if (data.monto <= 0) {
+                    showLoading(false);
+                    return toast('El monto debe ser mayor a cero.', 'error');
+                }
+                try {
+                    await addDoc(collection(db, `${publicBasePath}/movimientos`), data);
+                    modalMovimiento.close(); toast('Movimiento guardado');
+                } catch(err) { toast('Error', 'error'); console.error('Error al guardar movimiento:', err); }
+                showLoading(false);
+            },
+            delete: async (col, id) => {
+                // IMPORTANT: The confirm window is only for development/testing, production code should use a custom modal.
+                if(!confirm('¿Estás seguro de eliminar este registro?')) return;
+                showLoading(true);
+                try { await deleteDoc(doc(db, `${publicBasePath}/${col}`, id)); toast('Eliminado'); }
+                catch(err) { toast('Error', 'error'); console.error('Error al eliminar:', err); }
+                showLoading(false);
+            },
+            showComprobante: (reservaId) => {
+                const r = state.reservas.find(res => res.id === reservaId);
+                if (!r) return toast('Reserva no encontrada', 'error');
+                const casa = state.casas.find(c => c.id === r.casaId) || { nombre: 'N/A' };
+                
+                const pagos = r.pagos || [];
+                const pagado = pagos.reduce((acc, p) => acc + Number(p.monto), 0);
+                const saldo = r.total - pagado;
+                const contacto = r.dni && r.telefono ? `${r.dni} / ${r.telefono}` : r.dni || r.telefono || 'N/A';
+                
+                // 1. Llenar encabezado y totales
+                el('comp-fecha-hoy').textContent = formatDate(new Date().toISOString().split('T')[0]);
+                el('comp-propiedad').textContent = `Reserva para: ${casa.nombre}`;
+                el('comp-cliente').textContent = r.cliente;
+                el('comp-contacto').textContent = contacto;
+                el('comp-fechas').textContent = `${formatDate(r.inicio)} al ${formatDate(r.fin)}`;
+                el('comp-noches').textContent = `${diffDays(r.inicio, r.fin)}`;
+                el('comp-total-reserva').textContent = formatMoney(r.total);
+                el('comp-total-pagado').textContent = formatMoney(pagado);
+                el('comp-saldo-pendiente').textContent = formatMoney(saldo);
+
+                // 2. Llenar detalle de pagos
+                const pagosList = el('comp-pagos-list');
+                pagosList.innerHTML = pagos.map(p => `
+                    <div class="flex justify-between p-3 bg-white border border-slate-100 rounded-lg">
+                        <span class="text-slate-700 font-medium">${p.nota || 'Pago'}</span>
+                        <span class="font-bold text-slate-800">${formatMoney(p.monto)}</span>
+                    </div>
+                `).join('') || `<p class="text-center text-slate-400 p-4">Aún no se han registrado pagos.</p>`;
+
+                modalComprobante.open();
+            }
+        };
+
+
+        // MINI CALENDARIO (Dentro del Modal Reserva)
+
+
+        // CONFIG
+        el('form-config').addEventListener('submit', async (e) => {
+            e.preventDefault(); showLoading(true);
+            const data = {
+                limpieza: Number(el('conf-limpieza').value),
+                descuento: Number(el('conf-descuento').value)
+            };
+            try {
+                const ref = doc(db, `${publicBasePath}/config`, 'general');
+                await setDoc(ref, data, { merge: true });
+                toast('Configuración actualizada');
+            } catch(err) { toast('Error', 'error'); console.error(err); }
+            showLoading(false);
+        });
+
+        // EXPORT EXCEL
+        window.exportExcel = () => {
+            if(!state.reservas.length) return toast('No hay datos para exportar', 'error');
+            
+            let csv = "\uFEFFID,CASA,CLIENTE,DNI,TELEFONO,INGRESO,EGRESO,NOCHES,TOTAL,PAGADO,SALDO,ESTADO\n";
+            
+            state.reservas.forEach(r => {
+                const casa = state.casas.find(c => c.id === r.casaId)?.nombre || 'N/A';
+                const pagado = (r.pagos || []).reduce((s, p) => s + Number(p.monto), 0);
+                const saldo = r.total - pagado;
+                const estado = saldo <= 0 ? 'PAGADO' : 'PENDIENTE';
+                
+                csv += `"${r.id.slice(0,6)}","${casa}","${r.cliente}","${r.dni||''}","${r.telefono||''}","${r.inicio}","${r.fin}",${diffDays(r.inicio,r.fin)},${r.total},${pagado},${saldo},${estado}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Reporte_Reservas_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        // INIT
+        (async () => {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                onAuthStateChanged(auth, (u) => {
+                    if(u) {
+                        el('user-status').innerHTML = '<span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Online';
+                        el('current-date').textContent = formatDate(new Date().toISOString().split('T')[0]);
+                        
+                        // Listeners
+                        onSnapshot(collection(db, `${publicBasePath}/casas`), s => { 
+                            state.casas = s.docs.map(d=>({id:d.id,...d.data()})); 
+                            renderer.casas(); 
+                        });
+                        onSnapshot(collection(db, `${publicBasePath}/reservas`), s => { 
+                            state.reservas = s.docs.map(d=>({id:d.id,...d.data()})); 
+                            renderer.reservas(); 
+                            calendar.render(); 
+                            if(document.getElementById('modal-reserva').classList.contains('active')) miniCalendar.render(); // Actualizar si el modal está abierto
+                        });
+                        onSnapshot(collection(db, `${publicBasePath}/movimientos`), s => { 
+                            state.movimientos = s.docs.map(d=>({id:d.id,...d.data()})); 
+                            renderer.finanzas(); 
+                            renderer.dashboard(); 
+                        }); 
+                        onSnapshot(doc(db, `${publicBasePath}/config`, 'general'), s => {
+                            if(s.exists()) {
+                                state.config = s.data();
+                                el('conf-limpieza').value = state.config.limpieza || 0;
+                                el('conf-descuento').value = state.config.descuento || 0;
+                                renderer.dashboard(); 
+                            }
+                        });
+                    }
+                });
+            } catch(e) { 
+                console.error("Error crítico de inicialización/conexión:", e); 
+                el('user-status').textContent = '?? Error';
+                document.getElementById('loading').classList.add('hidden');
+            }
+        })();
+    </script>
+</body>
+</html>
